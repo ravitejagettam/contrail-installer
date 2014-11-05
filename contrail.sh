@@ -9,9 +9,9 @@ if [[ $EUID -eq 0 ]]; then
     exit 1
 fi
 if [[ "$CONTRAIL_DEFAULT_INSTALL" != "True" ]]; then
-    ENABLED_SERVICES=redis,cass,zk,ifmap,disco,apiSrv,schema,svc-mon,control,collector,analytics-api,query-engine,agent,redis-w,ui-jobs,ui-webs
+    ENABLED_SERVICES=redis,rabbit,cass,zk,ifmap,disco,apiSrv,schema,svc-mon,control,collector,analytics-api,query-engine,agent,redis-w,ui-jobs,ui-webs
 else
-    ENABLED_SERVICES=redis,cass,zk,ifmap,disco,apiSrv,schema,svc-mon,control,collector,analytics-api,query-engine,agent,redis-w
+    ENABLED_SERVICES=redis,rabbit,cass,zk,ifmap,disco,apiSrv,schema,svc-mon,control,collector,analytics-api,query-engine,agent,redis-w
 fi
 # Save trace setting
 MY_XTRACE=$(set +o | grep xtrace)
@@ -626,6 +626,7 @@ function install_contrail() {
             # get cassandra
             download_cassandra
             sudo rabbitmqctl change_password guest $RABBIT_PASSWORD
+            sudo service rabbitmq-server stop
             download_zookeeper
             change_stage "Build" "install"
             
@@ -830,10 +831,11 @@ function start_contrail() {
         if [[ "$CONTRAIL_DEFAULT_INSTALL" == "True" ]]; then
             stop_contrail_services
         fi
+        RABBIT_PATH="/usr/lib/rabbitmq/bin"
         # launch ...
         redis-cli flushall
         screen_it redis "sudo redis-server $REDIS_CONF"
-
+        screen_it rabbit "sudo $RABBIT_PATH/rabbitmq-server "   
         screen_it cass "sudo MAX_HEAP_SIZE=$CASS_MAX_HEAP_SIZE HEAP_NEWSIZE=$CASS_HEAP_NEWSIZE $CASS_PATH -f"
 
         screen_it zk  "cd $CONTRAIL_SRC/third_party/zookeeper-3.4.6; ./bin/zkServer.sh start"

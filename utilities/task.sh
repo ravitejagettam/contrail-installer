@@ -20,6 +20,7 @@ NETWORK_NAME=${NETWORK_NAME:-net}
 SUBNET_NAME=${SUBNET_NAME:-subnet} 
 SUBNET_CIDR=${SUBNET_CIDR:-11.0.0.0/24}
 TENANT_NAME=${TENANT_NAME:-demo}
+LAUNCHPAD_PPA=${LAUNCHPAD_PPA:-False}
 
 # error codes
 _RETURN_STATUS=0
@@ -54,6 +55,12 @@ function replace_localrc_bin_master()
         #sed -i "s/.*SERVICE_HOST=localhost.*/SERVICE_HOST=$IP/" ./localrc 
         sed -i "s/.*# CONTRAIL_REPO_PROTO=https.*/CONTRAIL_REPO_PROTO=https/" ./localrc
         echo "USE_SCREENS=True" >> ./localrc
+        if [[ "$LAUNCHPAD_PPA" = "True" ]] ; then
+            sed -i "s/.*# LAUNCHPAD_BRANCH=PPA.*/LAUNCHPAD_BRANCH=PPA/" ./localrc
+        else
+            sed -i "s/.*LAUNCHPAD_BRANCH=PPA.*/# LAUNCHPAD_BRANCH=PPA/" ./localrc
+
+        fi
     fi
 }
 
@@ -92,7 +99,11 @@ function value_check()
 function check_start_status()
 {   
     if [[ -d $CONTRAIL_DIR/status/contrail ]] ; then
-        enabled_services_count=${#ENABLED_SERVICES}
+        
+        enabled_services=($(echo ${ENABLED_SERVICES}|sed 's/,/ /g'))
+        enabled_services_count=${#enabled_services[@]}
+        
+          
         pid_count=`ls $CONTRAIL_DIR/status/contrail/*.pid|wc -l`
         if [[ $pid_count -le $enabled_services_count ]]; then
             echo 1
@@ -110,6 +121,7 @@ function run_command()
     cd $CONTRAIL_DIR
     if [[ "$_command" = "start" ]]; then
         ./contrail.sh stop
+        ./contrail.sh configure 
         if [[ -f $DEVSTACK_DIR/unstack.sh ]] ; then
             dir=`pwd` 
             cd $DEVSTACK_DIR
@@ -191,6 +203,9 @@ function start_contrail()
 {   if [[ "$WITH_CONTRAIL_CLONE" = "True" ]]; then
         clone_contrail
     fi
+    if [[ -d $CONTRAIL_DIR/status/contrail ]] ; then
+        rm $CONTRAIL_DIR/status/contrail/*.failure
+    fi
     if [[ -d $CONTRAIL_DIR ]] ; then
         cd $CONTRAIL_DIR 
         set_localrc
@@ -245,7 +260,7 @@ function start_contrail()
         if [[ "$running_status" = "install" ]]; then
             
             add_gateway
-            run_command configure
+            #run_command configure
             sleep 5
 
             echo "sleeping for 5 seconds to start contrail services..."
@@ -304,6 +319,12 @@ function start_script()
             #echo "entered into file"
             source $configuration_file
             set_environment
+            if [[ "$ENABLE_BINARY" = "True" ]]; then
+                ENABLED_SERVICES=$(grep -i "ENABLED_SERVICES" $CONTRAIL_DIR/contrail.sh| tail -1|cut -d "=" -f 2)
+            else
+                ENABLED_SERVICES=$(grep -i "ENABLED_SERVICES" $CONTRAIL_DIR/contrail.sh| head -1|cut     -d "=" -f 2)  
+            fi
+            #source $ENABLED_SERVICES
             #echo $WITH_CONTRAIL_CLONE
             start_contrail
             start_status=$(check_start_status)
@@ -316,6 +337,12 @@ function start_script()
         else
             if [[ $ARGS_COUNT -eq 0 ]] ; then
                 echo "continuing with the default parameters" 
+
+                if [[ "$ENABLE_BINARY" = "True" ]]; then
+                    ENABLED_SERVICES=$(grep -i "ENABLED_SERVICES" $CONTRAIL_DIR/contrail.sh| tail -1|cut     -d "=" -f 2)
+                else
+                    ENABLED_SERVICES=$(grep -i "ENABLED_SERVICES" $CONTRAIL_DIR/contrail.sh| head -1|cut         -d "=" -f 2)
+                fi
                 start_contrail
                 start_status=$(check_start_status)
                 if [[ $start_status -eq 0 ]]; then
@@ -404,8 +431,10 @@ function start_devstack()
         else
             cd $CLONE_DIR
         fi
-        source sanity.sh
-        start_sanity_script
+        if [[ "$run_sanity" = "True" ]] ; then
+            source sanity.sh
+            start_sanity_script
+        fi
         
         _RETURN_STATUS=$(status_return $_stack_status $STACK_ERR_CODE)
     fi

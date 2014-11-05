@@ -10,6 +10,10 @@
 
 
 CLONE_DIR=${CLONE_DIR:-`pwd`}
+if [[ $run_sanity ]] ; then
+    run_sanity=False
+fi
+run_sanity=${run_sanity:-"True"}
 WITH_CONTRAIL_CLONE=${WITH_CONTRAIL_CLONE:-True}
 NETWORK_NAME=${NETWORK_NAME:-net}
 SUBNET_NAME=${SUBNET_NAME:-subnet}
@@ -19,9 +23,30 @@ VM1_IP=${VM1_IP:-11.0.0.2}
 VM2_IP=${VM2_IP:-11.0.0.3}
 VM_USER=${VM_USER:-cirros}
 VM_PASSWORD=${VM_PASSWORD:-cubswin:)}
+RUN_SIMPLE_GATEWAY=${RUN_SIMPLE_GATEWAY:-True} 
 #CLONE_DIR=`pwd`
 _CONTRAIL_NEUTRON_SERVICES=("apiSrv" "schema" "svc-mon") 
 #source $DEVSTACK_DIR/openrc $TENANT_NAME $TENANT_NAME
+
+
+function set_environment()
+{
+    if [[ "$WITH_CONTRAIL_CLONE" = "False" ]]; then
+        CONTRAIL_CLONE_DIR=`pwd`
+        CONTRAIL_DIR=$CONTRAIL_CLONE_DIR/../../contrail-installer
+        DEVSTACK_CLONE_DIR=$CONTRAIL_DIR/..
+        DEVSTACK_DIR=$DEVSTACK_CLONE_DIR/devstack
+    else
+        CONTRAIL_CLONE_DIR=$CLONE_DIR
+        CONTRAIL_DIR=$CLONE_DIR/contrail-installer
+        DEVSTACK_CLONE_DIR=$CLONE_DIR
+        DEVSTACK_DIR=$DEVSTACK_CLONE_DIR/devstack
+    fi
+}
+
+if [[ "$run_sanity" = "True" ]] ; then
+    set_environment
+fi
 
 echo "$CONTRAIL_DIR"
 if [[ -f $DEVSTACK_DIR/openrc ]] ; then
@@ -126,18 +151,24 @@ function check_network()
     #echo $status
 }
 
+function get_image_name()
+{
+    image_list=($(glance image-list|awk '{print $4}'))
+    echo  ${image_list[1]}
+}
+
 function launch_vm(){
 
     
     vm_name=$1
     report_file=$2
-    image=cirros-0.3.1-x86_64-uec
+    image=$(get_image_name)
     flavor=m1.nano
-    vmargs="--image $image --flavor $flavor --key-name sshkey"
+    vmargs="--image $image --flavor $flavor "
 
-    yes | ssh-keygen -N "" -f sshkey
-    keypairs=$(nova keypair-add --pub-key sshkey.pub sshkey) 
-    echo "$keypairs" >> $report_file
+    #yes | ssh-keygen -N "" -f sshkey
+    #keypairs=$(nova keypair-add --pub-key sshkey.pub sshkey) 
+    #echo "$keypairs" >> $report_file
 
     
     nova boot $vmargs --nic net-id=$net_id $vm_name >> $report_file
@@ -232,14 +263,10 @@ function start_sanity_script()
             vm1_status=$? 
             ping -c 3 $VM2_IP >> $simplegateway_report_file
             vm2_status=$?
-            if [[ $vm1_status -eq 0 ]] && [[ $vm2_status -eq 0 ]] ; then
-                status_flags[4]="PASSED"
-                install_ping_requirements
-                ping_vms $VM1_IP $VM2_IP
-                
-            else
-                echo "TESTCASE : SIMPLE GATEWAY			-- FAILED " 
-                status_flags[4]="FAILED"
+            
+            
+            if [[ "$RUN_SIMPLE_GATEWAY" = "True" ]]; then
+                testcase_simple_gateway
             fi
 
         else
@@ -254,6 +281,22 @@ function start_sanity_script()
     final_sanity_script
 }   
 
+function testcase_simple_gateway()
+{
+     vm1_status=$1
+     vm2_status=$2  
+     if [[ $vm1_status -eq 0 ]] && [[ $vm2_status -eq 0 ]] ; then
+         status_flags[4]="PASSED"
+         install_ping_requirements
+         ping_vms $VM1_IP $VM2_IP
+
+     else
+         echo "TESTCASE : SIMPLE GATEWAY                 -- FAILED " 
+         status_flags[4]="FAILED"
+     fi
+
+
+}
 function check_array_value()
 {
     _array="${!1}"
@@ -306,8 +349,10 @@ function contrail_service_running_report()
                 printf '%-20s : ACTIVE\n' $service_name >> $report_file
             fi
         done
-        cat $report_error_file >> $report_file
-        rm $report_error_file
+        if [[ -f $report_error_file ]] ; then 
+            cat $report_error_file >> $report_file
+            rm $report_error_file
+        fi
         #echo $errors 
     fi
     status_flags[0]="PASSED" 
@@ -443,3 +488,7 @@ expect -c "
        echo "TESTCASE	PING FROM $source_ip TO $destination_ip    :       FAILED" >> $report_file
    fi
 }
+
+if [[ "$run_sanity" = "True" ]]; then
+    start_sanity_script
+fi

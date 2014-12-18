@@ -3,6 +3,7 @@
 
 # Contrail NFV
 # ------------
+
 if [[ $EUID -eq 0 ]]; then
     echo "You are running this script as root."
     echo "Cut it out."

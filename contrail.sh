@@ -546,7 +546,11 @@ function build_contrail() {
             python third_party/fetch_packages.py --file $contrail_cwd/installer.xml 
             change_stage "repo-sync" "fetch-packages"
         fi
-
+        #added to install libipfix from launchpad
+        sudo -E add-apt-repository -y ppa:opencontrail/ppa
+        apt_get update
+        apt_get install libipfix 
+       
         (cd third_party/thrift-*; touch configure.ac README ChangeLog; autoreconf --force --install)
         cd $CONTRAIL_SRC
         if [ "$INSTALL_PROFILE" = "ALL" ]; then
@@ -568,11 +572,8 @@ function build_contrail() {
             exit
         fi
     else	
-        if [[ "$LAUNCHPAD_BRANCH" = "PPA" ]]; then
-	    sudo -E add-apt-repository -y ppa:opencontrail/ppa
-        else
+        if [[ "$LAUNCHPAD_BRANCH" = "mainline" ]]; then
             sudo -E add-apt-repository -y ppa:opencontrail/snapshots
-            sudo -E add-apt-repository -y ppa:opencontrail/ppa
         fi
         apt_get update
         change_stage "python-dependencies" "Build"

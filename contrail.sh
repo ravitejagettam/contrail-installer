@@ -291,7 +291,9 @@ function download_dependencies {
         apt_get install libcommons-codec-java libhttpcore-java liblog4j1.2-java
         apt_get install linux-headers-$(uname -r)
         sudo -E add-apt-repository -y cloud-archive:havana
+        sudo -E add-apt-repository -y ppa:opencontrail/ppa
         apt_get update
+        apt_get install libipfix
         apt_get install python-neutron
         if [[ ${DISTRO} =~ (trusty) ]]; then
             apt_get install libboost-dev libboost-chrono-dev libboost-date-time-dev
@@ -546,17 +548,13 @@ function build_contrail() {
             python third_party/fetch_packages.py --file $contrail_cwd/installer.xml 
             change_stage "repo-sync" "fetch-packages"
         fi
-        #added to install libipfix from launchpad
-        sudo -E add-apt-repository -y ppa:opencontrail/ppa
-        apt_get update
-        apt_get install libipfix 
-       
+        
         (cd third_party/thrift-*; touch configure.ac README ChangeLog; autoreconf --force --install)
         cd $CONTRAIL_SRC
         if [ "$INSTALL_PROFILE" = "ALL" ]; then
             if [[ $(read_stage) == "fetch-packages" ]]; then
                 sudo scons --opt=production
-                ret_val=$?
+	        ret_val=$?
                 [[ $ret_val -ne 0 ]] && exit
                 change_stage "fetch-packages" "Build"
             fi
